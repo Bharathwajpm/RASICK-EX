@@ -1,0 +1,116 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.rasick.shared-mergeReleaseResources-16:/values-iw/values-iw.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\42701a8c6c0f3321b9e244f3d0512098\\transformed\\core-1.12.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,149,251,348,445,546,646,752",
+                        "endColumns": "93,101,96,96,100,99,105,100",
+                        "endOffsets": "144,246,343,440,541,641,747,848"
+                    },
+                    "to": {
+                        "startLines": "3,4,5,6,7,8,9,26",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "118,212,314,411,508,609,709,1980",
+                        "endColumns": "93,101,96,96,100,99,105,100",
+                        "endOffsets": "207,309,406,503,604,704,810,2076"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\e978ea21b2407f116b742f2ff0f8feb3\\transformed\\media3-session-1.3.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,118,199,267,334,412,493,578",
+                        "endColumns": "62,80,67,66,77,80,84,90",
+                        "endOffsets": "113,194,262,329,407,488,573,664"
+                    },
+                    "to": {
+                        "startLines": "2,10,20,21,22,23,24,25",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,815,1510,1578,1645,1723,1804,1889",
+                        "endColumns": "62,80,67,66,77,80,84,90",
+                        "endOffsets": "113,891,1573,1640,1718,1799,1884,1975"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\829fe87326e9b50048fdab3186316c9c\\transformed\\media3-exoplayer-1.3.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,120,179,246,311,385,447,527,607",
+                        "endColumns": "64,58,66,64,73,61,79,79,61",
+                        "endOffsets": "115,174,241,306,380,442,522,602,664"
+                    },
+                    "to": {
+                        "startLines": "11,12,13,14,15,16,17,18,19",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "896,961,1020,1087,1152,1226,1288,1368,1448",
+                        "endColumns": "64,58,66,64,73,61,79,79,61",
+                        "endOffsets": "956,1015,1082,1147,1221,1283,1363,1443,1505"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "com.rasick.shared-release-18:/values-iw/values-iw.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\42701a8c6c0f3321b9e244f3d0512098\\transformed\\core-1.12.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,149,251,348,445,546,646,752",
+                        "endColumns": "93,101,96,96,100,99,105,100",
+                        "endOffsets": "144,246,343,440,541,641,747,848"
+                    },
+                    "to": {
+                        "startLines": "3,4,5,6,7,8,9,26",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "118,212,314,411,508,609,709,1980",
+                        "endColumns": "93,101,96,96,100,99,105,100",
+                        "endOffsets": "207,309,406,503,604,704,810,2076"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\e978ea21b2407f116b742f2ff0f8feb3\\transformed\\media3-session-1.3.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,118,199,267,334,412,493,578",
+                        "endColumns": "62,80,67,66,77,80,84,90",
+                        "endOffsets": "113,194,262,329,407,488,573,664"
+                    },
+                    "to": {
+                        "startLines": "2,10,20,21,22,23,24,25",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,815,1510,1578,1645,1723,1804,1889",
+                        "endColumns": "62,80,67,66,77,80,84,90",
+                        "endOffsets": "113,891,1573,1640,1718,1799,1884,1975"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Bharath\\.gradle\\caches\\transforms-4\\829fe87326e9b50048fdab3186316c9c\\transformed\\media3-exoplayer-1.3.0\\res\\values-iw\\values-iw.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9,10",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,120,179,246,311,385,447,527,607",
+                        "endColumns": "64,58,66,64,73,61,79,79,61",
+                        "endOffsets": "115,174,241,306,380,442,522,602,664"
+                    },
+                    "to": {
+                        "startLines": "11,12,13,14,15,16,17,18,19",
+                        "startColumns": "4,4,4,4,4,4,4,4,4",
+                        "startOffsets": "896,961,1020,1087,1152,1226,1288,1368,1448",
+                        "endColumns": "64,58,66,64,73,61,79,79,61",
+                        "endOffsets": "956,1015,1082,1147,1221,1283,1363,1443,1505"
+                    }
+                }
+            ]
+        }
+    ]
+}

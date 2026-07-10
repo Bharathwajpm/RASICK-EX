@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.rasick.shared-release-18:/drawable/notification_bg.xml",
+        "source": "com.rasick.shared-core-1.12.0-4:/drawable/notification_bg.xml"
+    },
+    {
+        "merged": "com.rasick.shared-release-18:/drawable/notification_bg_low.xml",
+        "source": "com.rasick.shared-core-1.12.0-4:/drawable/notification_bg_low.xml"
+    },
+    {
+        "merged": "com.rasick.shared-release-18:/drawable/notification_icon_background.xml",
+        "source": "com.rasick.shared-core-1.12.0-4:/drawable/notification_icon_background.xml"
+    },
+    {
+        "merged": "com.rasick.shared-release-18:/drawable/media3_icon_circular_play.png",
+        "source": "com.rasick.shared-media3-session-1.3.0-13:/drawable/media3_icon_circular_play.png"
+    },
+    {
+        "merged": "com.rasick.shared-release-18:/drawable/notification_tile_bg.xml",
+        "source": "com.rasick.shared-core-1.12.0-4:/drawable/notification_tile_bg.xml"
+    }
+]
