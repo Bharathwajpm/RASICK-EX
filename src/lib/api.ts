@@ -1,7 +1,12 @@
 import type { Song } from "@/lib/mock-data";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "" : "http://localhost:5000");
+const API_BASE = (() => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (import.meta.env.DEV) return ""; // Vite dev proxy handles /api
+  // Production: use relative URLs (same origin) when VITE_API_URL is not set.
+  // Set VITE_API_URL at build time if backend is on a different origin.
+  return "";
+})();
 
 export function resolveMediaUrl(url?: string): string {
   if (!url) return "";
@@ -57,7 +62,7 @@ export function getAuthHeaders(): Record<string, string> {
 async function parseError(res: Response) {
   try {
     const data = await res.json();
-    return data.message ?? "Request failed";
+    return data.message ?? data.error ?? "Request failed";
   } catch {
     return res.statusText || "Request failed";
   }
@@ -87,26 +92,28 @@ export async function loginApi(
     return { error: err instanceof Error ? err.message : "Unable to connect to server" };
   }
 
-  let data: { message?: string; username?: string; role?: "admin" | "user"; token?: string };
+  let responseData: any;
   try {
-    data = await res.json();
+    responseData = await res.json();
   } catch (err) {
     return { error: "Invalid response from server" };
   }
 
   if (!res.ok) {
-    return { error: data.message ?? "Invalid Username or Password" };
+    return { error: responseData.message ?? responseData.error ?? "Invalid Username or Password" };
   }
 
-  if (!data.username || !data.role || !data.token) {
+  const payload = responseData.success && responseData.data ? responseData.data : responseData;
+
+  if (!payload.username || !payload.role || !payload.token) {
     return { error: "Invalid response from server" };
   }
 
   return {
     user: {
-      username: data.username.toLowerCase(),
-      role: data.role,
-      token: data.token,
+      username: payload.username.toLowerCase(),
+      role: payload.role,
+      token: payload.token,
     },
   };
 }
@@ -129,7 +136,8 @@ export async function fetchSongs(params?: {
   }
 
   const data = await res.json();
-  return ((data.songs ?? []) as Song[]).map(normalizeSong);
+  const songsData = (data.success && data.data ? data.data.songs : data.songs) ?? [];
+  return (songsData as Song[]).map(normalizeSong);
 }
 
 export async function createSong(payload: {
@@ -137,16 +145,22 @@ export async function createSong(payload: {
   category: string;
   coverFile: File;
   audioFile: File;
+  fallbackFile?: File;
   artist?: string;
   section?: string;
+  album?: string;
+  albumId?: string;
 }): Promise<{ message: string; song: Song }> {
   const form = new FormData();
   form.append("title", payload.title);
   form.append("category", payload.category);
   form.append("cover", payload.coverFile);
   form.append("audio", payload.audioFile);
+  if (payload.fallbackFile) form.append("fallback", payload.fallbackFile);
   if (payload.artist) form.append("artist", payload.artist);
   if (payload.section) form.append("section", payload.section);
+  if (payload.album) form.append("album", payload.album);
+  if (payload.albumId) form.append("albumId", payload.albumId);
 
   const res = await apiFetch("/api/songs", {
     method: "POST",
@@ -154,17 +168,33 @@ export async function createSong(payload: {
     body: form,
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Upload failed");
+  // Guard: always parse JSON safely. If the backend crashed mid-upload
+  // (ECONNRESET / empty body), res.json() throws "Unexpected end of JSON input".
+  let data: any = {};
+  try {
+    data = await res.json();
+  } catch {
+    // The backend returned no body or a broken stream.
+    if (!res.ok) {
+      throw new Error(
+        `Upload failed (HTTP ${res.status}). The server may have crashed during the upload. Check backend logs.`
+      );
+    }
+    throw new Error("Server returned an empty response. Check backend logs.");
+  }
+
+  if (!res.ok) throw new Error(data.message ?? data.error ?? "Upload failed");
+  
+  const payloadData = data.success && data.data ? data.data : data;
   return {
-    ...data,
-    song: normalizeSong(data.song as Song),
+    message: payloadData.message ?? "Song uploaded successfully!",
+    song: normalizeSong(payloadData.song as Song),
   };
 }
 
 export async function updateSong(
   id: string,
-  payload: Partial<Pick<Song, "title" | "artist" | "cover" | "duration" | "category">>
+  payload: Partial<Pick<Song, "title" | "artist" | "cover" | "duration" | "category" | "album" | "albumId">>
 ): Promise<{ message: string; song: Song }> {
   const res = await apiFetch(`/api/songs/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -176,8 +206,12 @@ export async function updateSong(
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Update failed");
-  return data;
+  if (!res.ok) throw new Error(data.message ?? data.error ?? "Update failed");
+  const payloadData = data.success && data.data ? data.data : data;
+  return {
+    message: payloadData.message ?? "Song updated successfully",
+    song: normalizeSong(payloadData.song as Song),
+  };
 }
 
 export async function deleteSong(id: string): Promise<{ message: string }> {
@@ -187,8 +221,11 @@ export async function deleteSong(id: string): Promise<{ message: string }> {
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Delete failed");
-  return data;
+  if (!res.ok) throw new Error(data.message ?? data.error ?? "Delete failed");
+  const payloadData = data.success && data.data ? data.data : data;
+  return {
+    message: payloadData.message ?? "Song deleted successfully",
+  };
 }
 
 export function fileToDataUrl(file: File): Promise<string> {
@@ -211,7 +248,8 @@ export async function fetchCategories(): Promise<Category[]> {
   const res = await apiFetch("/api/categories");
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
-  return (data.categories ?? []) as Category[];
+  const categoriesData = (data.success && data.data ? data.data.categories : data.categories) ?? [];
+  return categoriesData as Category[];
 }
 
 export async function createCategory(name: string, color?: string): Promise<Category> {
@@ -221,8 +259,9 @@ export async function createCategory(name: string, color?: string): Promise<Cate
     body: JSON.stringify({ name, color }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Failed to create category");
-  return data.category as Category;
+  if (!res.ok) throw new Error(data.message ?? data.error ?? "Failed to create category");
+  const payloadData = data.success && data.data ? data.data : data;
+  return payloadData.category as Category;
 }
 
 export async function updateCategory(
@@ -235,8 +274,9 @@ export async function updateCategory(
     body: JSON.stringify(payload),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Failed to update category");
-  return data.category as Category;
+  if (!res.ok) throw new Error(data.message ?? data.error ?? "Failed to update category");
+  const payloadData = data.success && data.data ? data.data : data;
+  return payloadData.category as Category;
 }
 
 export async function deleteCategory(id: string): Promise<void> {
@@ -246,8 +286,44 @@ export async function deleteCategory(id: string): Promise<void> {
   });
   if (!res.ok) {
     const data = await res.json();
-    throw new Error(data.message ?? "Failed to delete category");
+    throw new Error(data.message ?? data.error ?? "Failed to delete category");
   }
+}
+
+// ─── Artists ─────────────────────────────────────────────────────────
+export interface Artist {
+  id: string;
+  name: string;
+  image: string | null;
+  songCount: number;
+}
+
+export async function fetchArtists(): Promise<Artist[]> {
+  const res = await apiFetch("/api/artists");
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  const artists = (data.success && data.data ? data.data.artists : data.artists) ?? [];
+  return artists as Artist[];
+}
+
+// ─── Albums ──────────────────────────────────────────────────────────
+export interface Album {
+  id: string;
+  title: string;
+  artistId: string | null;
+  artistName: string | null;
+  cover: string | null;
+  releaseYear: number | null;
+  songCount: number;
+}
+
+export async function fetchAlbums(artistId?: string): Promise<Album[]> {
+  const search = artistId ? `?artistId=${encodeURIComponent(artistId)}` : "";
+  const res = await apiFetch(`/api/albums${search}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  const albums = (data.success && data.data ? data.data.albums : data.albums) ?? [];
+  return albums as Album[];
 }
 
 export interface AdminDashboardData {
@@ -324,8 +400,9 @@ export async function fetchAdminDashboard(): Promise<AdminDashboardData> {
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
+  const payload = data.success && data.data ? data.data : data;
   return {
-    ...data,
-    songs: ((data.songs ?? []) as Song[]).map(normalizeSong),
+    stats: payload.stats,
+    songs: ((payload.songs ?? []) as Song[]).map(normalizeSong),
   };
 }

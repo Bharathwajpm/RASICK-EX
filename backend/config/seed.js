@@ -52,14 +52,26 @@ const songs = [
 const seedDatabase = async () => {
   const userCount = await User.countDocuments();
   if (userCount === 0) {
-    const passwordHash = await bcrypt.hash("admin123", 10);
-    const userPasswordHash = await bcrypt.hash("user123", 10);
+    const adminUsername = (process.env.SEED_ADMIN_USERNAME || "RASICKEX").trim().toLowerCase();
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    const userUsername = (process.env.SEED_USER_USERNAME || "RASICKEX2026").trim().toLowerCase();
+    const userPassword = process.env.SEED_USER_PASSWORD;
 
-    await User.insertMany([
-      { username: "admin", password: passwordHash, role: "admin" },
-      { username: "user", password: userPasswordHash, role: "user" },
-    ]);
-    console.log("Seeded default users (admin/admin123, user/user123)");
+    if (!adminPassword || !userPassword) {
+      console.warn(
+        "[Seed] SEED_ADMIN_PASSWORD and/or SEED_USER_PASSWORD not set in .env. " +
+        "Skipping user seeding. Set these values and restart to create default users."
+      );
+    } else {
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+      const userPasswordHash = await bcrypt.hash(userPassword, 10);
+
+      await User.insertMany([
+        { username: adminUsername, password: passwordHash, role: "admin" },
+        { username: userUsername, password: userPasswordHash, role: "user" },
+      ]);
+      console.log(`[Seed] Default users created: ${adminUsername} (admin), ${userUsername} (user)`);
+    }
   }
 
   const categoryCount = await Category.countDocuments();
@@ -74,14 +86,19 @@ const seedDatabase = async () => {
     console.log("Seeded artists");
   }
 
-  const songCount = await Song.countDocuments();
-  if (songCount === 0) {
+  const activeSongsCount = await Song.countDocuments({ section: "trending", isActive: true });
+  if (activeSongsCount === 0) {
+    console.log("No active trending songs found. Reactivating or re-seeding default catalog...");
+    const defaultExternalIds = songs.map(s => s.externalId).filter(Boolean);
+    await Song.deleteMany({ externalId: { $in: defaultExternalIds } });
+
     const enrichedSongs = songs.map(s => ({
       ...s,
       audioSizeBytes: Math.floor(Math.random() * (8000000 - 3000000)) + 3000000, // 3MB to 8MB
       coverSizeBytes: Math.floor(Math.random() * (300000 - 50000)) + 50000,     // 50KB to 300KB
       playCount: Math.floor(Math.random() * 200) + 20,
-      downloadCount: Math.floor(Math.random() * 80) + 5
+      downloadCount: Math.floor(Math.random() * 80) + 5,
+      isActive: true
     }));
     await Song.insertMany(enrichedSongs);
     console.log("Seeded songs (catalog placeholders — upload real audio via admin panel)");

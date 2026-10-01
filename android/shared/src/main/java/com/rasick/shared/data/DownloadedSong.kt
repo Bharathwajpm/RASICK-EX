@@ -15,5 +15,7 @@ data class DownloadedSong(
     val fileSize: Long,
     val downloadDate: Long,
     val status: String, // DOWNLOADING, COMPLETED, PAUSED, FAILED
-    val progress: Int = 0
+    val progress: Int = 0,
+    val audioType: String? = null, // MP3, AAC, WAV, FLAC, AC3, E-AC3, DTS, DTS-HD
+    val playbackPosition: Long = 0L // Last playback position in milliseconds
 )

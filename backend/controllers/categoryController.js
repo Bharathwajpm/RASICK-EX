@@ -23,12 +23,15 @@ exports.getCategories = async (req, res, next) => {
     const countByName = Object.fromEntries(counts.map((row) => [row._id, row.count]));
 
     res.json({
-      categories: categories.map((category) =>
-        formatCategory({
-          ...category.toObject(),
-          songCount: countByName[category.name] || 0,
-        })
-      ),
+      success: true,
+      data: {
+        categories: categories.map((category) =>
+          formatCategory({
+            ...category.toObject(),
+            songCount: countByName[category.name] || 0,
+          })
+        ),
+      },
     });
   } catch (error) {
     next(error);
@@ -40,7 +43,11 @@ exports.createCategory = async (req, res, next) => {
     const { name, color } = req.body;
 
     if (!name || !name.trim()) {
-      return res.status(400).json({ message: "Category name is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Category name is required",
+        error: "BadRequestError",
+      });
     }
 
     const category = await Category.create({
@@ -48,7 +55,12 @@ exports.createCategory = async (req, res, next) => {
       color: color || "from-blue-500 to-indigo-600",
     });
 
-    res.status(201).json({ category: formatCategory(category) });
+    res.status(201).json({
+      success: true,
+      data: {
+        category: formatCategory(category),
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -60,7 +72,11 @@ exports.updateCategory = async (req, res, next) => {
     const category = await Category.findById(id);
 
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+        error: "NotFoundError",
+      });
     }
 
     if (req.body.name) {
@@ -79,7 +95,12 @@ exports.updateCategory = async (req, res, next) => {
     await category.save();
     await refreshSongCounts();
 
-    res.json({ category: formatCategory(category) });
+    res.json({
+      success: true,
+      data: {
+        category: formatCategory(category),
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -91,12 +112,21 @@ exports.deleteCategory = async (req, res, next) => {
     const category = await Category.findByIdAndDelete(id);
 
     if (!category) {
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+        error: "NotFoundError",
+      });
     }
 
     await Song.updateMany({ category: category.name }, { $unset: { category: "" } });
 
-    res.json({ message: "Category deleted successfully" });
+    res.json({
+      success: true,
+      data: {
+        message: "Category deleted successfully",
+      },
+    });
   } catch (error) {
     next(error);
   }

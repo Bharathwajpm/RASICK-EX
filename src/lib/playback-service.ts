@@ -1,4 +1,5 @@
 import type { Song } from "@/lib/mock-data";
+import { getStoredUser } from "@/lib/api";
 
 export type PlaybackEventHandlers = {
   onTimeUpdate?: (currentTime: number) => void;
@@ -301,6 +302,21 @@ class BrowserPlaybackService implements PlaybackService {
     return this.currentSource;
   }
 
+  /**
+   * Appends the JWT token as a query parameter to streaming URLs.
+   * HTML5 <audio> elements cannot set custom HTTP headers, so the token
+   * is passed in the URL for the backend's ?token= fallback in auth middleware.
+   */
+  private appendToken(url: string | null): string | null {
+    if (!url) return null;
+    // Don't modify blob/data URLs (offline cached audio)
+    if (/^(blob:|data:)/i.test(url)) return url;
+    const user = getStoredUser();
+    if (!user?.token) return url;
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}token=${encodeURIComponent(user.token)}`;
+  }
+
   resolveSource(song: Song): string | null {
     const audio = this.audio;
     const surroundUrl = song.surroundUrl?.trim() || null;
@@ -317,7 +333,7 @@ class BrowserPlaybackService implements PlaybackService {
     if (!surroundUrl) {
       const selected = fallbackUrl || legacy;
       console.log(`[resolveSource] => Selected: ${selected || '(none)'} (type: ${fallbackUrl ? 'fallbackUrl' : legacy ? 'legacy audioUrl' : 'none'})`);
-      return selected;
+      return this.appendToken(selected);
     }
 
     // Check if browser can play surround formats
@@ -333,20 +349,20 @@ class BrowserPlaybackService implements PlaybackService {
       if (surroundSupported) {
         console.log(`[resolveSource] => Selected: ${surroundUrl} (type: surroundUrl — browser supports surround)`);
         this.log("resolveSource", 0, { status: "surround supported by browser", surroundUrl });
-        return surroundUrl;
+        return this.appendToken(surroundUrl);
       }
 
       // If the surround file is not supported, automatically use fallbackUrl
       if (fallbackUrl) {
         console.log(`[resolveSource] => Selected: ${fallbackUrl} (type: fallbackUrl — surround not supported)`);
         this.log("resolveSource", 0, { status: "surround not supported, using fallback", fallbackUrl });
-        return fallbackUrl;
+        return this.appendToken(fallbackUrl);
       }
     }
 
     // No fallback available, return surround anyway (will trigger error handler)
     const finalUrl = surroundUrl || legacy;
     console.log(`[resolveSource] => Selected: ${finalUrl || '(none)'} (type: ${surroundUrl ? 'surroundUrl (no fallback)' : 'legacy audioUrl'})`);
-    return finalUrl;
+    return this.appendToken(finalUrl);
   }
 }

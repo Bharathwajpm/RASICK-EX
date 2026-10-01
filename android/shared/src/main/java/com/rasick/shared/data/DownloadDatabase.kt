@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         SearchHistory::class,
         QueueItem::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class DownloadDatabase : RoomDatabase() {

@@ -1,5 +1,4 @@
-const { Upload } = require("@aws-sdk/lib-storage");
-const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const fs = require("fs");
 
 const s3Client = new S3Client({
@@ -13,7 +12,7 @@ const s3Client = new S3Client({
 });
 
 /**
- * Uploads a local file to Filebase S3 bucket with progress logs and retries.
+ * Uploads a local file to Filebase S3 bucket using PutObjectCommand with progress logs and retries.
  * @param {string} localFilePath Path to the local file.
  * @param {string} destinationKey Key mapping in S3.
  * @param {string} contentType MIME type of the file.
@@ -21,31 +20,36 @@ const s3Client = new S3Client({
  * @returns {Promise<string>} Public Filebase S3 object URL.
  */
 const uploadToFilebase = async (localFilePath, destinationKey, contentType, attempt = 1) => {
-  let fileStream;
+  let fileBuffer;
   try {
-    fileStream = fs.createReadStream(localFilePath);
+    const size = fs.statSync(localFilePath).size;
+    console.log(`[Filebase S3] Read starting for key=${destinationKey} from path=${localFilePath} (${size} bytes)`);
+    fileBuffer = await fs.promises.readFile(localFilePath);
   } catch (e) {
-    throw new Error(`Failed to create read stream for file: ${localFilePath}. Error: ${e.message}`);
+    console.error(`[Filebase S3] Failed to read local file: ${localFilePath}. Error: ${e.message}`);
+    throw new Error(`Failed to read local file for upload: ${e.message}`);
   }
 
-  const upload = new Upload({
-    client: s3Client,
-    params: {
-      Bucket: process.env.FILEBASE_BUCKET || "rasick-music",
-      Key: destinationKey,
-      Body: fileStream,
-      ContentType: contentType,
-    },
-  });
-
-  upload.on("httpUploadProgress", (progress) => {
-    const pct = progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
-    console.log(`[Filebase Progress] key=${destinationKey} - ${pct}% loaded (${progress.loaded}/${progress.total || 'unknown'} bytes)`);
-  });
+  const controller = new AbortController();
+  const timeoutMs = 60000; // 60 seconds timeout
+  const timeoutId = setTimeout(() => {
+    console.warn(`[Filebase S3] Timeout (${timeoutMs}ms) exceeded for key=${destinationKey}. Aborting upload.`);
+    controller.abort();
+  }, timeoutMs);
 
   try {
     console.log(`[Filebase S3] Upload started: ${destinationKey} (attempt ${attempt})`);
-    await upload.done();
+    
+    const command = new PutObjectCommand({
+      Bucket: process.env.FILEBASE_BUCKET || "rasick-music",
+      Key: destinationKey,
+      Body: fileBuffer,
+      ContentType: contentType,
+    });
+
+    await s3Client.send(command, { abortSignal: controller.signal });
+    clearTimeout(timeoutId);
+
     console.log(`[Filebase S3] Upload completed successfully: ${destinationKey}`);
 
     const bucket = process.env.FILEBASE_BUCKET || "rasick-music";
@@ -54,7 +58,9 @@ const uploadToFilebase = async (localFilePath, destinationKey, contentType, atte
       .replace(/\/$/, "");
     return `https://${bucket}.${cleanEndpoint}/${destinationKey}`;
   } catch (error) {
-    console.error(`[Filebase S3] Upload failed for ${destinationKey} (attempt ${attempt}): ${error.message}`);
+    clearTimeout(timeoutId);
+    console.error(`[Filebase S3] Upload failed for ${destinationKey} (attempt ${attempt}): ${error.name} - ${error.message}`);
+    
     if (attempt < 3) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`[Filebase S3] Retrying upload in ${delay}ms...`);

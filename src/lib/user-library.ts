@@ -1,4 +1,5 @@
 import type { Song } from "@/lib/mock-data";
+import { resolveMediaUrl, getAuthHeaders } from "@/lib/api";
 
 const DOWNLOADS_KEY = "rasick-downloads";
 const LIKES_KEY = "rasick-likes";
@@ -37,68 +38,80 @@ function writeJson<T>(key: string, value: T) {
   notifyLibraryChange();
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(AUDIO_STORE)) {
-        db.createObjectStore(AUDIO_STORE);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Failed to open offline storage"));
-  });
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function getDb(): Promise<IDBDatabase> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("IndexedDB is only available in browser environment"));
+  }
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(AUDIO_STORE)) {
+          db.createObjectStore(AUDIO_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        dbPromise = null;
+        reject(request.error ?? new Error("Failed to open offline storage"));
+      };
+    });
+  }
+  return dbPromise;
 }
 
 async function cacheAudioBlob(songId: string, blob: Blob) {
-  const db = await openDb();
+  const db = await getDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(AUDIO_STORE, "readwrite");
     tx.objectStore(AUDIO_STORE).put(blob, songId);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error("Failed to cache audio"));
   });
-  db.close();
 }
 
 async function removeAudioBlob(songId: string) {
-  const db = await openDb();
+  const db = await getDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(AUDIO_STORE, "readwrite");
     tx.objectStore(AUDIO_STORE).delete(songId);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error("Failed to remove cached audio"));
   });
-  db.close();
 }
 
 async function clearAudioBlobs() {
-  const db = await openDb();
+  const db = await getDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(AUDIO_STORE, "readwrite");
     tx.objectStore(AUDIO_STORE).clear();
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error("Failed to clear cached audio"));
   });
-  db.close();
 }
 
 export async function getCachedAudioUrl(songId: string): Promise<string | null> {
   try {
-    const db = await openDb();
+    const db = await getDb();
     const blob = await new Promise<Blob | undefined>((resolve, reject) => {
       const tx = db.transaction(AUDIO_STORE, "readonly");
       const req = tx.objectStore(AUDIO_STORE).get(songId);
-      req.onsuccess = () => resolve(req.result as Blob | undefined);
-      req.onerror = () => reject(req.error ?? new Error("Failed to read cached audio"));
+      let result: Blob | undefined;
+      req.onsuccess = () => {
+        result = req.result as Blob | undefined;
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error ?? new Error("Failed to read cached audio"));
     });
-    db.close();
     return blob ? URL.createObjectURL(blob) : null;
   } catch {
     return null;
   }
 }
+
 
 export function getDownloadedSongs(): Song[] {
   return readJson<Song[]>(DOWNLOADS_KEY, []);
@@ -113,7 +126,11 @@ export async function downloadSong(song: Song): Promise<void> {
     throw new Error("This song has no audio file");
   }
 
-  const response = await fetch(song.audioUrl);
+  const resolvedUrl = resolveMediaUrl(song.audioUrl);
+  const response = await fetch(resolvedUrl, {
+    credentials: "include",
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error("Failed to download audio file");
   }

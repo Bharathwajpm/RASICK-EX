@@ -7,6 +7,7 @@ const artistSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      maxlength: [120, "Artist name cannot exceed 120 characters"],
     },
     image: {
       type: String,

@@ -1,183 +1,257 @@
 package com.rasick.shared.audio
 
 import android.content.Context
+import android.net.Uri
 import android.os.StatFs
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.NoOpCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import com.rasick.shared.api.RetrofitClient
 import com.rasick.shared.data.DownloadDatabase
 import com.rasick.shared.data.DownloadedSong
 import com.rasick.shared.model.Song
 import kotlinx.coroutines.*
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
-import java.io.RandomAccessFile
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 
+@OptIn(UnstableApi::class)
 object DownloadManager {
-    private val client = OkHttpClient()
-    private val activeCalls = ConcurrentHashMap<String, okhttp3.Call>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var database: DownloadDatabase? = null
-    private var downloadDir: File? = null
+    private var appContext: Context? = null
+    
+    private var databaseProvider: StandaloneDatabaseProvider? = null
+    private var simpleCache: SimpleCache? = null
+    private var downloadManager: androidx.media3.exoplayer.offline.DownloadManager? = null
+    private var cacheDataSourceFactory: CacheDataSource.Factory? = null
+    private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
 
-    fun initialize(context: Context) {
-        if (database != null) return
-        database = DownloadDatabase.getDatabase(context.applicationContext)
-        downloadDir = File(context.applicationContext.filesDir, "downloads").apply {
-            if (!exists()) mkdirs()
+    private fun buildAuthHeaders(): Map<String, String> {
+        val token = RetrofitClient.getAuthToken()
+        return if (!token.isNullOrBlank()) {
+            mapOf("Authorization" to "Bearer $token")
+        } else {
+            emptyMap()
         }
     }
 
-    private fun getDb() = database ?: throw IllegalStateException("DownloadManager not initialized")
-    private fun getDir() = downloadDir ?: throw IllegalStateException("DownloadManager not initialized")
+    /**
+     * Call after login/logout to update the JWT token on ExoPlayer's HTTP stack.
+     */
+    fun refreshAuthHeaders() {
+        httpDataSourceFactory?.setDefaultRequestProperties(buildAuthHeaders())
+    }
+
+    @Synchronized
+    fun initialize(context: Context) {
+        if (downloadManager != null) return
+        appContext = context.applicationContext
+        
+        database = DownloadDatabase.getDatabase(context.applicationContext)
+        
+        val dbProvider = StandaloneDatabaseProvider(context.applicationContext)
+        databaseProvider = dbProvider
+        
+        val cacheDir = File(context.applicationContext.filesDir, "media3_cache")
+        val cache = SimpleCache(cacheDir, NoOpCacheEvictor(), dbProvider)
+        simpleCache = cache
+        
+        val factory = DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(buildAuthHeaders())
+        httpDataSourceFactory = factory
+        
+        val manager = androidx.media3.exoplayer.offline.DownloadManager(
+            context.applicationContext,
+            dbProvider,
+            cache,
+            factory,
+            Executor { it.run() }
+        )
+        downloadManager = manager
+        
+        cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(factory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        manager.addListener(object : androidx.media3.exoplayer.offline.DownloadManager.Listener {
+            override fun onDownloadChanged(
+                downloadManager: androidx.media3.exoplayer.offline.DownloadManager,
+                download: Download,
+                finalException: java.lang.Exception?
+            ) {
+                syncDownloadToRoom(download)
+            }
+
+            override fun onDownloadRemoved(
+                downloadManager: androidx.media3.exoplayer.offline.DownloadManager,
+                download: Download
+            ) {
+                scope.launch {
+                    database?.downloadedSongDao()?.deleteSongById(download.request.id)
+                }
+            }
+        })
+        
+        // Recover states and sync Room DB on startup
+        scope.launch {
+            delay(1000)
+            try {
+                val cursor = manager.downloadIndex.getDownloads()
+                while (cursor.moveToNext()) {
+                    syncDownloadToRoom(cursor.download)
+                }
+                cursor.close()
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    @Synchronized
+    fun getMedia3DownloadManager(context: Context): androidx.media3.exoplayer.offline.DownloadManager {
+        initialize(context)
+        return downloadManager ?: throw IllegalStateException("DownloadManager not initialized")
+    }
+
+    @Synchronized
+    fun getCacheDataSourceFactory(context: Context): CacheDataSource.Factory {
+        initialize(context)
+        return cacheDataSourceFactory ?: throw IllegalStateException("DownloadManager not initialized")
+    }
+
+    private fun syncDownloadToRoom(download: Download) {
+        scope.launch {
+            val dao = database?.downloadedSongDao() ?: return@launch
+            val existing = dao.getSongById(download.request.id) ?: return@launch
+            
+            val status = when (download.state) {
+                Download.STATE_COMPLETED -> "COMPLETED"
+                Download.STATE_FAILED -> "FAILED"
+                Download.STATE_STOPPED -> "PAUSED"
+                else -> "DOWNLOADING"
+            }
+            
+            val progress = if (download.percentDownloaded < 0) {
+                0
+            } else {
+                download.percentDownloaded.toInt().coerceIn(0, 100)
+            }
+
+            val localPath = if (status == "COMPLETED") {
+                getCacheDir() ?: existing.localPath
+            } else {
+                existing.localPath
+            }
+            
+            val updated = existing.copy(
+                status = status,
+                progress = progress,
+                fileSize = download.contentLength,
+                localPath = localPath
+            )
+            dao.insertSong(updated)
+        }
+    }
 
     fun startDownload(song: Song) {
-        val callKey = song.id
-        if (activeCalls.containsKey(callKey)) return
-
+        val manager = downloadManager ?: return
+        val db = database ?: return
+        
         scope.launch {
-            val db = getDb()
             val dao = db.downloadedSongDao()
-
             var downloadedSong = dao.getSongById(song.id)
+            
+            val resolvedUrl = if (song.audioUrl?.startsWith("http") == true) song.audioUrl else {
+                val baseUrl = RetrofitClient.getBaseUrl().removeSuffix("/")
+                "$baseUrl/${song.audioUrl?.removePrefix("/")}"
+            }
+
+            val extension = song.audioUrl?.substringAfterLast(".", "")?.lowercase() ?: ""
+            val audioType = when (extension) {
+                "mp3" -> "MP3"
+                "flac" -> "FLAC"
+                "wav" -> "WAV"
+                "aac", "m4a" -> "AAC"
+                "ac3" -> "AC3"
+                "ec3", "eac3" -> "E-AC3"
+                "dts" -> "DTS"
+                "dtshd" -> "DTS-HD"
+                else -> extension.uppercase().ifBlank { null }
+            }
+            
             if (downloadedSong == null) {
-                val extension = song.audioUrl?.substringAfterLast(".", "mp3") ?: "mp3"
-                val localFile = File(getDir(), "${song.id}.$extension")
                 downloadedSong = DownloadedSong(
                     id = song.id,
                     title = song.title,
                     artist = song.artist,
                     category = song.category,
                     cover = song.cover,
-                    originalUrl = song.audioUrl ?: "",
-                    localPath = localFile.absolutePath,
+                    originalUrl = resolvedUrl,
+                    localPath = "",
                     fileSize = 0L,
                     downloadDate = System.currentTimeMillis(),
                     status = "DOWNLOADING",
-                    progress = 0
+                    progress = 0,
+                    audioType = audioType
                 )
                 dao.insertSong(downloadedSong)
             } else {
                 if (downloadedSong.status == "COMPLETED") return@launch
-                downloadedSong = downloadedSong.copy(status = "DOWNLOADING", progress = downloadedSong.progress)
+                downloadedSong = downloadedSong.copy(status = "DOWNLOADING", audioType = audioType ?: downloadedSong.audioType)
                 dao.insertSong(downloadedSong)
             }
 
-            val destinationFile = File(downloadedSong.localPath)
-            var existingBytes = 0L
-            if (destinationFile.exists()) {
-                existingBytes = destinationFile.length()
-            }
-
-            if (getAvailableInternalMemorySize() < 50 * 1024 * 1024) {
-                dao.insertSong(downloadedSong.copy(status = "FAILED", progress = 0))
-                return@launch
-            }
-
-            val resolvedUrl = if (song.audioUrl?.startsWith("http") == true) song.audioUrl else {
-                val baseUrl = RetrofitClient.getBaseUrl().removeSuffix("/")
-                "$baseUrl/${song.audioUrl?.removePrefix("/")}"
-            }
-
-            val request = Request.Builder()
-                .url(resolvedUrl)
-                .addHeader("Range", "bytes=$existingBytes-")
+            val downloadRequest = DownloadRequest.Builder(song.id, Uri.parse(resolvedUrl))
                 .build()
-
-            val call = client.newCall(request)
-            activeCalls[callKey] = call
-
-            try {
-                val response = call.execute()
-                if (!response.isSuccessful) {
-                    val code = response.code
-                    if (code == 416) {
-                        if (existingBytes > 1024) {
-                            dao.insertSong(downloadedSong.copy(status = "COMPLETED", progress = 100, fileSize = existingBytes))
-                        } else {
-                            destinationFile.delete()
-                            dao.insertSong(downloadedSong.copy(status = "FAILED", progress = 0))
-                        }
-                    } else {
-                        dao.insertSong(downloadedSong.copy(status = "FAILED", progress = 0))
-                    }
-                    activeCalls.remove(callKey)
-                    return@launch
-                }
-
-                val body = response.body
-                if (body == null) {
-                    dao.insertSong(downloadedSong.copy(status = "FAILED"))
-                    activeCalls.remove(callKey)
-                    return@launch
-                }
-
-                val contentLength = body.contentLength()
-                val totalBytes = if (contentLength == -1L) -1L else (contentLength + existingBytes)
-
-                val randomAccessFile = RandomAccessFile(destinationFile, "rw")
-                randomAccessFile.seek(existingBytes)
-
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var bytesWritten = existingBytes
-
-                body.byteStream().use { inputStream ->
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        if (!activeCalls.containsKey(callKey)) {
-                            randomAccessFile.close()
-                            return@launch
-                        }
-                        randomAccessFile.write(buffer, 0, bytesRead)
-                        bytesWritten += bytesRead
-                        if (totalBytes > 0) {
-                            val progress = ((bytesWritten * 100) / totalBytes).toInt()
-                            dao.insertSong(downloadedSong.copy(progress = progress, fileSize = totalBytes))
-                        }
-                    }
-                }
-                randomAccessFile.close()
-
-                if (totalBytes > 0 && destinationFile.length() < totalBytes) {
-                    dao.insertSong(downloadedSong.copy(status = "FAILED"))
-                } else {
-                    dao.insertSong(downloadedSong.copy(status = "COMPLETED", progress = 100, fileSize = destinationFile.length()))
-                }
-
-            } catch (e: Exception) {
-                if (activeCalls.containsKey(callKey)) {
-                    dao.insertSong(downloadedSong.copy(status = "FAILED"))
-                }
-            } finally {
-                activeCalls.remove(callKey)
-            }
+            
+            val ctx = appContext ?: return@launch
+            DownloadService.sendAddDownload(
+                ctx,
+                RasickDownloadService::class.java,
+                downloadRequest,
+                /* foreground = */ true
+            )
         }
     }
 
     fun pauseDownload(songId: String) {
-        val call = activeCalls.remove(songId)
-        call?.cancel()
-        scope.launch {
-            val dao = getDb().downloadedSongDao()
-            val downloadedSong = dao.getSongById(songId)
-            if (downloadedSong != null && downloadedSong.status == "DOWNLOADING") {
-                dao.insertSong(downloadedSong.copy(status = "PAUSED"))
-            }
-        }
+        val ctx = appContext ?: return
+        DownloadService.sendSetStopReason(
+            ctx,
+            RasickDownloadService::class.java,
+            songId,
+            /* stopReason = */ 1,
+            /* foreground = */ false
+        )
+    }
+
+    fun resumeDownload(songId: String) {
+        val ctx = appContext ?: return
+        DownloadService.sendSetStopReason(
+            ctx,
+            RasickDownloadService::class.java,
+            songId,
+            /* stopReason = */ Download.STOP_REASON_NONE,
+            /* foreground = */ true
+        )
     }
 
     fun cancelDownload(songId: String) {
-        val call = activeCalls.remove(songId)
-        call?.cancel()
-        scope.launch {
-            val dao = getDb().downloadedSongDao()
-            val downloadedSong = dao.getSongById(songId)
-            if (downloadedSong != null) {
-                dao.deleteSong(downloadedSong)
-                val file = File(downloadedSong.localPath)
-                if (file.exists()) file.delete()
-            }
-        }
+        val ctx = appContext ?: return
+        DownloadService.sendRemoveDownload(
+            ctx,
+            RasickDownloadService::class.java,
+            songId,
+            /* foreground = */ false
+        )
     }
 
     fun deleteDownload(songId: String) {
@@ -185,31 +259,28 @@ object DownloadManager {
     }
 
     fun getAvailableInternalMemorySize(): Long {
-        val path = getDir()
-        val stat = StatFs(path.path)
-        val blockSize = stat.blockSizeLong
-        val availableBlocks = stat.availableBlocksLong
-        return availableBlocks * blockSize
+        val cacheDir = appContext?.filesDir ?: return 0L
+        val stat = StatFs(cacheDir.path)
+        return stat.availableBlocksLong * stat.blockSizeLong
     }
 
     fun getUsedStorageSize(): Long {
-        var totalSize = 0L
-        getDir().listFiles()?.forEach { file ->
-            if (file.isFile) {
-                totalSize += file.length()
-            }
-        }
-        return totalSize
+        val cache = simpleCache ?: return 0L
+        return cache.cacheSpace
     }
 
     fun isDownloaded(songId: String): Boolean {
-        var result = false
-        runBlocking(Dispatchers.IO) {
-            val song = getDb().downloadedSongDao().getSongById(songId)
-            if (song != null && song.status == "COMPLETED" && File(song.localPath).exists()) {
-                result = true
-            }
-        }
-        return result
+        val manager = downloadManager ?: return false
+        val download = manager.downloadIndex.getDownload(songId)
+        return download != null && download.state == Download.STATE_COMPLETED
+    }
+
+    /**
+     * Returns the local cache directory path for downloaded media.
+     * Media3 SimpleCache stores files in this directory; the CacheDataSource
+     * will find them automatically by content ID.
+     */
+    fun getCacheDir(): String? {
+        return appContext?.let { File(it.filesDir, "media3_cache").absolutePath }
     }
 }

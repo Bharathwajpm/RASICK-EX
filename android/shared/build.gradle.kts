@@ -26,7 +26,7 @@ android {
             buildConfigField("String", "BACKEND_URL", "\"https://your-domain.com/\"")
         }
         debug {
-            buildConfigField("String", "BACKEND_URL", "\"http://10.0.2.2:5000/\"")
+            buildConfigField("String", "BACKEND_URL", "\"http://10.97.144.187:5000/\"")
         }
     }
     compileOptions {
@@ -56,6 +56,7 @@ dependencies {
     // Media3 (ExoPlayer)
     api("androidx.media3:media3-exoplayer:1.3.0")
     api("androidx.media3:media3-session:1.3.0")
+    api("org.jellyfin.media3:media3-ffmpeg-decoder:1.3.1+1")
 
     // Compose Runtime
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
@@ -72,4 +73,7 @@ dependencies {
 
     // Jetpack DataStore
     api("androidx.datastore:datastore-preferences:1.0.0")
+
+    // WorkManager for background downloads
+    api("androidx.work:work-runtime-ktx:2.9.0")
 }

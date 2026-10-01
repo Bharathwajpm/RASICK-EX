@@ -11,15 +11,6 @@ export const Route = createFileRoute("/admin/dashboard")({
   component: AdminDashboard,
 });
 
-function StatCard({ label, value, color }: { label: string; value: string | number; color: string }) {
-  return (
-    <div className="glass rounded-2xl p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
 function AdminDashboard() {
   const { isAdmin, logout } = useAuth();
   const navigate = useNavigate();
@@ -131,14 +122,6 @@ function AdminDashboard() {
         <p className="text-xs text-muted-foreground">Content Management Panel</p>
       </div>
 
-      {/* Stats */}
-      <section className="relative z-10 mt-6 grid grid-cols-2 gap-3 px-5">
-        <StatCard label="Total Songs" value={dashboardData?.stats.totalSongs ?? songs.length} color="text-primary" />
-        <StatCard label="Categories" value={dashboardData?.stats.totalCategories ?? categoryCount} color="text-emerald-400" />
-        <StatCard label="Downloads" value={dashboardData?.stats.downloads ?? "1.2k"} color="text-amber-400" />
-        <StatCard label="Users" value={dashboardData?.stats.totalUsers ?? "340"} color="text-pink-400" />
-      </section>
-
       {/* Storage Usage */}
       {dashboardData?.stats.storage && (
         <section className="relative z-10 mt-6 px-5">
@@ -175,84 +158,6 @@ function AdminDashboard() {
               <span>Remaining: {dashboardData.stats.storage.remaining.toFixed(2)} GB</span>
             </div>
           </div>
-        </section>
-      )}
-
-      {/* Operational Analytics & Extended Stats */}
-      {dashboardData?.stats && (
-        <section className="relative z-10 mt-6 px-5 space-y-4">
-          
-          {/* Operational Analytics */}
-          <div className="glass rounded-2xl p-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Operational Analytics</h2>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Uploads Today</span><span className="font-semibold">{dashboardData.stats.analytics.uploadsToday}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Downloads Today</span><span className="font-semibold">{dashboardData.stats.analytics.downloadsToday}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Downloads</span><span className="font-semibold">{dashboardData.stats.analytics.totalDownloads}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Most Played Song</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.analytics.mostPlayedSong}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Largest Song</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.analytics.largestSong}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Largest Cover Image</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.analytics.largestCoverImage}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Average Song Size</span><span className="font-semibold">{dashboardData.stats.analytics.avgSongSize}</span></div>
-            </div>
-          </div>
-
-          {/* Song Statistics */}
-          <div className="glass rounded-2xl p-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Song Statistics</h2>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Audio Size</span><span className="font-semibold">{dashboardData.stats.songStats.totalAudioSize}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Average Audio Size</span><span className="font-semibold">{dashboardData.stats.songStats.avgAudioSize}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Largest Audio File</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.songStats.largestAudioFile}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Smallest Audio File</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.songStats.smallestAudioFile}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Newest Upload</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.songStats.newestUpload}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Oldest Upload</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.songStats.oldestUpload}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Covers</span><span className="font-semibold">{dashboardData.stats.songStats.totalCovers}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Average Cover Size</span><span className="font-semibold">{dashboardData.stats.songStats.avgCoverSize}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Largest Cover</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.songStats.largestCover}</span></div>
-            </div>
-          </div>
-
-          {/* User Statistics */}
-          <div className="glass rounded-2xl p-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">User Statistics</h2>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Registered Users</span><span className="font-semibold">{dashboardData.stats.userStats.registeredUsers}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Admin Users</span><span className="font-semibold">{dashboardData.stats.userStats.adminUsers}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Normal Users</span><span className="font-semibold">{dashboardData.stats.userStats.normalUsers}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">New Users Today</span><span className="font-semibold">{dashboardData.stats.userStats.newUsersToday}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Most Active User</span><span className="font-semibold">{dashboardData.stats.userStats.mostActiveUser}</span></div>
-            </div>
-          </div>
-
-          {/* Playback & Download Analytics */}
-          <div className="glass rounded-2xl p-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Playback & Downloads</h2>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Most Played Song</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.playbackStats.mostPlayedSong}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Least Played Song</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.playbackStats.leastPlayedSong}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Recently Played Count</span><span className="font-semibold">{dashboardData.stats.playbackStats.recentlyPlayedCount}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Favorite Count</span><span className="font-semibold">{dashboardData.stats.playbackStats.favoriteCount}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Playlist Count</span><span className="font-semibold">{dashboardData.stats.playbackStats.playlistCount}</span></div>
-              <div className="flex justify-between border-t border-secondary/40 pt-2 mt-2"><span className="text-muted-foreground">Downloaded Songs (Total)</span><span className="font-semibold">{dashboardData.stats.downloadStats.downloadedSongs}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Most Downloaded Song</span><span className="font-semibold truncate max-w-[150px] text-right">{dashboardData.stats.downloadStats.mostDownloadedSong}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Est. Total Offline Storage</span><span className="font-semibold">{dashboardData.stats.downloadStats.totalOfflineStorageUsed}</span></div>
-            </div>
-          </div>
-
-          {/* System Health */}
-          <div className="glass rounded-2xl p-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">System Health Status</h2>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Backend</span><span className="font-semibold">{dashboardData.stats.systemHealth.backend}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">MongoDB</span><span className="font-semibold">{dashboardData.stats.systemHealth.mongodb}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Filebase</span><span className="font-semibold">{dashboardData.stats.systemHealth.filebase}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Upload</span><span className="font-semibold">{dashboardData.stats.systemHealth.uploadService}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Streaming</span><span className="font-semibold">{dashboardData.stats.systemHealth.streamingService}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Download</span><span className="font-semibold">{dashboardData.stats.systemHealth.downloadService}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Storage</span><span className="font-semibold">{dashboardData.stats.systemHealth.storageService}</span></div>
-            </div>
-          </div>
-
         </section>
       )}
 

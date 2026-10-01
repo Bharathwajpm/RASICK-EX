@@ -6,15 +6,21 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node --test tests/upload.test.js",
     "test:integration": "node scripts/integration-test.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",
     "@aws-sdk/lib-storage": "^3.1079.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.12.1",
     "multer": "^1.4.5-lts.2",

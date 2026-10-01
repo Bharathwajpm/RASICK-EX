@@ -6,6 +6,8 @@ export type Song = {
   cover: string;
   duration: string;
   category?: string;
+  album?: string;
+  albumId?: string;
   audioUrl?: string;
   surroundUrl?: string;
   fallbackUrl?: string;

@@ -83,6 +83,12 @@ object DeviceCapabilities {
         return getSupportedCodecs().any { it.mimeType.equals(mimeType, ignoreCase = true) }
     }
 
+    fun isHardwareCodecSupported(mimeType: String): Boolean {
+        return getSupportedCodecs().any {
+            it.mimeType.equals(mimeType, ignoreCase = true) && it.isHardware
+        }
+    }
+
     // Extended metrics for device manager
     fun getRamInfo(context: Context): String {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

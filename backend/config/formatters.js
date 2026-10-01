@@ -1,5 +1,4 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+// Song / Category / Artist response formatters
 
 const formatSong = (song) => {
   const json = song.toJSON();
@@ -54,9 +53,20 @@ const formatCategory = (category) => ({
 });
 
 const formatArtist = (artist) => ({
-  id: artist._id.toString(),
+  id: artist._id ? artist._id.toString() : artist.id,
   name: artist.name,
   image: artist.image,
+  songCount: artist.songCount || 0,
+});
+
+const formatAlbum = (album) => ({
+  id: album._id ? album._id.toString() : album.id,
+  title: album.title,
+  artistId: album.artistId ? album.artistId.toString() : null,
+  artistName: album.artistName,
+  cover: album.cover || null,
+  releaseYear: album.releaseYear || null,
+  songCount: album.songCount || 0,
 });
 
 const formatUser = (user) => user.toJSON();
@@ -65,5 +75,6 @@ module.exports = {
   formatSong,
   formatCategory,
   formatArtist,
+  formatAlbum,
   formatUser,
 };

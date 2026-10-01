@@ -1,6 +1,7 @@
 package com.rasick.tv.ui
 
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,7 +11,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -65,16 +65,9 @@ fun TvSettingsScreen(
                 color = Color.White
             )
 
-            var backFocused by remember { mutableStateOf(false) }
             Button(
                 onClick = onBack,
-                modifier = Modifier
-                    .onFocusChanged { backFocused = it.isFocused }
-                    .border(
-                        width = 2.dp,
-                        color = if (backFocused) Color.White else Color.Transparent,
-                        shape = RoundedCornerShape(20.dp)
-                    ),
+                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {},
                 colors = ButtonDefaults.colors(containerColor = Color.DarkGray, contentColor = Color.White)
             ) {
                 Text("Back to Dashboard")
@@ -89,26 +82,19 @@ fun TvSettingsScreen(
         ) {
             // Streaming Quality Row
             item {
-                var streamFocused by remember { mutableStateOf(false) }
-                Surface(
-                    onClick = {
-                        val nextQuality = when (streamingQuality) {
-                            "Low" -> "Medium"
-                            "Medium" -> "High"
-                            else -> "Low"
-                        }
-                        streamingQuality = nextQuality
-                        prefs.edit().putString("streaming_quality", nextQuality).apply()
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onFocusChanged { streamFocused = it.isFocused }
-                        .border(
-                            width = 2.dp,
-                            color = if (streamFocused) Color.White else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
-                        ),
-                    colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1E1E1E), contentColor = Color.White)
+                        .tvFocusable(RoundedCornerShape(8.dp)) {
+                            val nextQuality = when (streamingQuality) {
+                                "Low" -> "Medium"
+                                "Medium" -> "High"
+                                else -> "Low"
+                            }
+                            streamingQuality = nextQuality
+                            prefs.edit().putString("streaming_quality", nextQuality).apply()
+                        }
+                        .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -126,26 +112,19 @@ fun TvSettingsScreen(
 
             // Download Quality Row
             item {
-                var downFocused by remember { mutableStateOf(false) }
-                Surface(
-                    onClick = {
-                        val nextQuality = when (downloadQuality) {
-                            "Low" -> "Medium"
-                            "Medium" -> "High"
-                            else -> "Low"
-                        }
-                        downloadQuality = nextQuality
-                        prefs.edit().putString("download_quality", nextQuality).apply()
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onFocusChanged { downFocused = it.isFocused }
-                        .border(
-                            width = 2.dp,
-                            color = if (downFocused) Color.White else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
-                        ),
-                    colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1E1E1E), contentColor = Color.White)
+                        .tvFocusable(RoundedCornerShape(8.dp)) {
+                            val nextQuality = when (downloadQuality) {
+                                "Low" -> "Medium"
+                                "Medium" -> "High"
+                                else -> "Low"
+                            }
+                            downloadQuality = nextQuality
+                            prefs.edit().putString("download_quality", nextQuality).apply()
+                        }
+                        .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -163,21 +142,14 @@ fun TvSettingsScreen(
 
             // Auto Wifi Switch
             item {
-                var wifiFocused by remember { mutableStateOf(false) }
-                Surface(
-                    onClick = {
-                        autoWifi = !autoWifi
-                        prefs.edit().putBoolean("auto_wifi", autoWifi).apply()
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onFocusChanged { wifiFocused = it.isFocused }
-                        .border(
-                            width = 2.dp,
-                            color = if (wifiFocused) Color.White else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
-                        ),
-                    colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1E1E1E), contentColor = Color.White)
+                        .tvFocusable(RoundedCornerShape(8.dp)) {
+                            autoWifi = !autoWifi
+                            prefs.edit().putBoolean("auto_wifi", autoWifi).apply()
+                        }
+                        .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -195,36 +167,26 @@ fun TvSettingsScreen(
 
             // Clear Cache
             item {
-                var cacheFocused by remember { mutableStateOf(false) }
-                Surface(
-                    onClick = {
-                        if (!isClearing) {
-                            isClearing = true
-                            scope.launch(Dispatchers.IO) {
-                                val db = DownloadDatabase.getDatabase(context)
-                                
-                                // Delete cached files
-                                context.filesDir.resolve("downloads").listFiles()?.forEach { file ->
-                                    file.delete()
-                                }
-                                db.clearAllTables()
-                                
-                                withContext(Dispatchers.Main) {
-                                    refreshCache()
-                                    isClearing = false
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tvFocusable(RoundedCornerShape(8.dp)) {
+                            if (!isClearing) {
+                                isClearing = true
+                                scope.launch(Dispatchers.IO) {
+                                    val db = DownloadDatabase.getDatabase(context)
+                                    context.filesDir.resolve("media3_cache").listFiles()?.forEach { file ->
+                                        file.deleteRecursively()
+                                    }
+                                    db.clearAllTables()
+                                    withContext(Dispatchers.Main) {
+                                        refreshCache()
+                                        isClearing = false
+                                    }
                                 }
                             }
                         }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { cacheFocused = it.isFocused }
-                        .border(
-                            width = 2.dp,
-                            color = if (cacheFocused) Color.White else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp)
-                        ),
-                    colors = ClickableSurfaceDefaults.colors(containerColor = Color(0xFF1E1E1E), contentColor = Color.White)
+                        .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),

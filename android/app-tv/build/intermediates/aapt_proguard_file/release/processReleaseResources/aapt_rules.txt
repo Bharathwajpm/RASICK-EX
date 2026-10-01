@@ -1,7 +1,0 @@
--keep class androidx.core.app.CoreComponentFactory { <init>(); }
--keep class androidx.profileinstaller.ProfileInstallReceiver { <init>(); }
--keep class androidx.room.MultiInstanceInvalidationService { <init>(); }
--keep class androidx.startup.InitializationProvider { <init>(); }
--keep class com.rasick.shared.audio.PlaybackService { <init>(); }
--keep class com.rasick.tv.TvActivity { <init>(); }
--keep class com.rasick.tv.ui.TvCrashActivity { <init>(); }

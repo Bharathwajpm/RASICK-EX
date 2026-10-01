@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Upload, ImagePlus, FileAudio, ArrowLeft, X, CheckCircle } from "lucide-react";
-import { createSong, fetchCategories, type Category } from "@/lib/api";
+import { createSong, fetchCategories, fetchArtists, fetchAlbums, type Category, type Artist, type Album } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 
 const ACCEPTED_AUDIO_EXTENSIONS = [".mp3", ".dts", ".ac3", ".wav", ".aac", ".flac"];
@@ -23,8 +23,12 @@ function UploadSong() {
   const audioRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [albumId, setAlbumId] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -40,8 +44,24 @@ function UploadSong() {
       fetchCategories()
         .then(setCategories)
         .catch(() => setCategories([]));
+      fetchArtists()
+        .then(setArtists)
+        .catch(() => setArtists([]));
+      fetchAlbums()
+        .then(setAlbums)
+        .catch(() => setAlbums([]));
     }
   }, [isAdmin]);
+
+  const handleArtistChange = (name: string) => {
+    setArtist(name);
+    setAlbumId("");
+  };
+
+  const selectedArtist = artists.find((a) => a.name === artist);
+  const filteredAlbums = artist
+    ? albums.filter((al) => al.artistId === selectedArtist?.id)
+    : albums;
 
   const handleCover = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -68,17 +88,23 @@ function UploadSong() {
     if (!title.trim() || !category || !coverFile || !audioFile) return;
     setUploading(true);
     try {
+      const selectedAlbum = albums.find((a) => a.id === albumId);
       await createSong({
         title: title.trim(),
         category,
         coverFile,
         audioFile,
+        artist: artist || undefined,
         section: "latest",
+        album: selectedAlbum?.title || undefined,
+        albumId: albumId || undefined,
       });
       setSubmitted(true);
       setTimeout(() => {
         setSubmitted(false);
         setTitle("");
+        setArtist("");
+        setAlbumId("");
         setCategory("");
         setCoverFile(null);
         setAudioFile(null);
@@ -178,6 +204,52 @@ function UploadSong() {
               placeholder="Enter song title"
               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
+          </div>
+        </div>
+
+        {/* Artist */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Artist
+          </label>
+          <div className="glass flex items-center rounded-xl border border-input px-4 py-3 focus-within:border-primary/60 transition-colors">
+            <select
+              value={artist}
+              onChange={(e) => handleArtistChange(e.target.value)}
+              className="w-full bg-transparent text-sm text-foreground focus:outline-none appearance-none"
+            >
+              <option value="" className="bg-card">
+                Select an artist (optional)
+              </option>
+              {artists.map((a) => (
+                <option key={a.id} value={a.name} className="bg-card">
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Album */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Album
+          </label>
+          <div className="glass flex items-center rounded-xl border border-input px-4 py-3 focus-within:border-primary/60 transition-colors">
+            <select
+              value={albumId}
+              onChange={(e) => setAlbumId(e.target.value)}
+              className="w-full bg-transparent text-sm text-foreground focus:outline-none appearance-none"
+            >
+              <option value="" className="bg-card">
+                Select an album (optional)
+              </option>
+              {filteredAlbums.map((al) => (
+                <option key={al.id} value={al.id} className="bg-card">
+                  {al.title}{al.artistName ? ` — ${al.artistName}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

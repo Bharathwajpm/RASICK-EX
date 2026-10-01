@@ -13,7 +13,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,20 +66,10 @@ fun TvDownloadsScreen(
                 )
             }
 
-            var backFocused by remember { mutableStateOf(false) }
             Button(
                 onClick = onBack,
-                modifier = Modifier
-                    .onFocusChanged { backFocused = it.isFocused }
-                    .border(
-                        width = 2.dp,
-                        color = if (backFocused) Color.White else Color.Transparent,
-                        shape = RoundedCornerShape(20.dp)
-                    ),
-                colors = ButtonDefaults.colors(
-                    containerColor = Color.DarkGray,
-                    contentColor = Color.White
-                )
+                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {},
+                colors = ButtonDefaults.colors(containerColor = Color.DarkGray, contentColor = Color.White)
             ) {
                 Text("Back to Dashboard")
             }
@@ -98,183 +87,156 @@ fun TvDownloadsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(downloadedSongs) { item ->
-                    TvDownloadItemCard(
-                        item = item,
-                        onClickPlay = {
-                            val song = Song(
-                                id = item.id,
-                                title = item.title,
-                                artist = item.artist,
-                                cover = item.cover,
-                                duration = "0",
-                                category = item.category,
-                                section = null,
-                                audioUrl = item.originalUrl
-                            )
-                            val playQueue = downloadedSongs.map {
-                                Song(
-                                    id = it.id,
-                                    title = it.title,
-                                    artist = it.artist,
-                                    cover = it.cover,
-                                    duration = "0",
-                                    category = it.category,
-                                    section = null,
-                                    audioUrl = it.originalUrl
-                                )
+                    var cardFocused by remember { mutableStateOf(false) }
+                    val song = Song(
+                        id = item.id,
+                        title = item.title,
+                        artist = item.artist,
+                        cover = item.cover,
+                        duration = "0",
+                        category = item.category,
+                        section = null,
+                        audioUrl = item.originalUrl
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tvFocusable(RoundedCornerShape(12.dp)) {
+                                if (item.status == "COMPLETED") {
+                                    val playQueue = downloadedSongs.map {
+                                        Song(
+                                            id = it.id,
+                                            title = it.title,
+                                            artist = it.artist,
+                                            cover = it.cover,
+                                            duration = "0",
+                                            category = it.category,
+                                            section = null,
+                                            audioUrl = it.originalUrl
+                                        )
+                                    }
+                                    PlaybackManager.play(song, playQueue)
+                                }
                             }
-                            PlaybackManager.play(song, playQueue)
-                        },
-                        onPause = { DownloadManager.pauseDownload(item.id) },
-                        onResume = {
-                            val song = Song(
-                                id = item.id,
-                                title = item.title,
-                                artist = item.artist,
-                                cover = item.cover,
-                                duration = "0",
-                                category = item.category,
-                                section = null,
-                                audioUrl = item.originalUrl
-                            )
-                            DownloadManager.startDownload(song)
-                        },
-                        onDelete = { DownloadManager.deleteDownload(item.id) }
-                    )
-                }
-            }
-        }
-    }
-}
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = item.artist,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.LightGray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Status: ${item.status}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = when (item.status) {
+                                            "COMPLETED" -> Color.Green
+                                            "DOWNLOADING" -> Color.Cyan
+                                            "PAUSED" -> Color.Yellow
+                                            else -> Color.Red
+                                        }
+                                    )
+                                }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun TvDownloadItemCard(
-    item: DownloadedSong,
-    onClickPlay: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var cardFocused by remember { mutableStateOf(false) }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    when (item.status) {
+                                        "DOWNLOADING" -> {
+                                            Button(
+                                                onClick = { DownloadManager.pauseDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Pause, contentDescription = "Pause", modifier = Modifier.size(16.dp))
+                                            }
+                                            Button(
+                                                onClick = { DownloadManager.deleteDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                        "PAUSED" -> {
+                                            Button(
+                                                onClick = { DownloadManager.resumeDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Resume", modifier = Modifier.size(16.dp))
+                                            }
+                                            Button(
+                                                onClick = { DownloadManager.deleteDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                        "FAILED" -> {
+                                            Button(
+                                                onClick = { DownloadManager.startDownload(song) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(16.dp))
+                                            }
+                                            Button(
+                                                onClick = { DownloadManager.deleteDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                        "COMPLETED" -> {
+                                            Button(
+                                                onClick = { DownloadManager.deleteDownload(item.id) },
+                                                modifier = Modifier.tvFocusable(RoundedCornerShape(20.dp)) {}
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
-    Surface(
-        onClick = { if (item.status == "COMPLETED") onClickPlay() },
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged { cardFocused = it.isFocused }
-            .border(
-                width = 2.dp,
-                color = if (cardFocused) Color.White else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .background(Color(0xFF1E1E1E))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = item.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.LightGray
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Status: ${item.status}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = when (item.status) {
-                            "COMPLETED" -> Color.Green
-                            "DOWNLOADING" -> Color.Cyan
-                            "PAUSED" -> Color.Yellow
-                            else -> Color.Red
-                        }
-                    )
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    when (item.status) {
-                        "DOWNLOADING" -> {
-                            TvActionIconButton(onClick = onPause, icon = Icons.Default.Pause, contentDescription = "Pause")
-                            TvActionIconButton(onClick = onDelete, icon = Icons.Default.Close, contentDescription = "Cancel")
-                        }
-                        "PAUSED", "FAILED" -> {
-                            TvActionIconButton(onClick = onResume, icon = Icons.Default.PlayArrow, contentDescription = "Resume")
-                            TvActionIconButton(onClick = onDelete, icon = Icons.Default.Close, contentDescription = "Cancel")
-                        }
-                        "COMPLETED" -> {
-                            TvActionIconButton(onClick = onDelete, icon = Icons.Default.Delete, contentDescription = "Delete")
+                            if (item.status == "DOWNLOADING" || item.status == "PAUSED") {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    LinearProgressIndicator(
+                                        progress = item.progress.toFloat() / 100f,
+                                        modifier = Modifier.weight(1f).height(6.dp),
+                                        color = Color.White,
+                                        trackColor = Color.DarkGray
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "${item.progress}%",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-
-            if (item.status == "DOWNLOADING" || item.status == "PAUSED") {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LinearProgressIndicator(
-                        progress = item.progress.toFloat() / 100f,
-                        modifier = Modifier.weight(1f).height(6.dp),
-                        color = Color.White,
-                        trackColor = Color.DarkGray
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "${item.progress}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White
-                    )
-                }
-            }
         }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun TvActionIconButton(
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    modifier: Modifier = Modifier
-) {
-    var focused by remember { mutableStateOf(false) }
-    Button(
-        onClick = onClick,
-        modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
-            .border(
-                width = 2.dp,
-                color = if (focused) Color.White else Color.Transparent,
-                shape = RoundedCornerShape(20.dp)
-            ),
-        colors = ButtonDefaults.colors(
-            containerColor = Color.DarkGray,
-            contentColor = Color.White
-        )
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(18.dp)
-        )
     }
 }
 

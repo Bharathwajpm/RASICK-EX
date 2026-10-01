@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvLoginScreen(
-    onLoginSuccess: (username: String, role: String) -> Unit,
+    onLoginSuccess: (username: String, role: String, token: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var username by remember { mutableStateOf("") }
@@ -135,11 +135,18 @@ fun TvLoginScreen(
                     scope.launch {
                         try {
                             val response = RetrofitClient.authService.login(
-                                LoginRequest(username.trim().toLowerCase(), password, role)
+                                LoginRequest(username.trim().lowercase(), password, role)
                             )
                             if (response.isSuccessful && response.body() != null) {
-                                val body = response.body()!!
-                                onLoginSuccess(body.username, body.role)
+                                val envelope = response.body()!!
+                                val data = envelope.data
+                                val token = data?.token
+                                val resUser = data?.username ?: username.trim().lowercase()
+                                val resRole = data?.role ?: role
+
+                                RetrofitClient.setAuthToken(token)
+                                com.rasick.shared.audio.DownloadManager.refreshAuthHeaders()
+                                onLoginSuccess(resUser, resRole, token)
                             } else {
                                 val errorBody = response.errorBody()?.string()
                                 val message = try {

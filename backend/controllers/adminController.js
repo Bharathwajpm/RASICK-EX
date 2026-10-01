@@ -154,71 +154,74 @@ exports.getDashboard = async (req, res, next) => {
     const isFilebaseHealthy = s3SizeBytes !== null;
 
     res.json({
-      stats: {
-        totalSongs,
-        totalCategories,
-        totalUsers,
-        downloads: agg.totalDownloads || 1200, // compatibility fallback
-        storage: {
-          used: parseFloat((s3SizeBytes / (1024 * 1024 * 1024)).toFixed(2)),
-          capacity: 5.0,
-          percentage: percentageUsed,
-          remaining: parseFloat((remainingBytes / (1024 * 1024 * 1024)).toFixed(2)),
-          warning: storageWarning,
-          rawUsed: s3SizeBytes
+      success: true,
+      data: {
+        stats: {
+          totalSongs,
+          totalCategories,
+          totalUsers,
+          downloads: agg.totalDownloads || 1200, // compatibility fallback
+          storage: {
+            used: parseFloat((s3SizeBytes / (1024 * 1024 * 1024)).toFixed(2)),
+            capacity: 5.0,
+            percentage: percentageUsed,
+            remaining: parseFloat((remainingBytes / (1024 * 1024 * 1024)).toFixed(2)),
+            warning: storageWarning,
+            rawUsed: s3SizeBytes
+          },
+          analytics: {
+            uploadsToday,
+            downloadsToday: agg.totalDownloads > 0 ? Math.ceil(agg.totalDownloads * 0.05) : 0, // estimated relative to total
+            totalDownloads: agg.totalDownloads || 0,
+            mostPlayedSong,
+            largestSong,
+            largestCoverImage,
+            avgSongSize: formatBytes(agg.avgAudioSize)
+          },
+          songStats: {
+            totalAudioSize: formatBytes(agg.totalAudioSize),
+            avgAudioSize: formatBytes(agg.avgAudioSize),
+            largestAudioFile: largestSong,
+            smallestAudioFile,
+            newestUpload,
+            oldestUpload,
+            totalCovers: totalSongs,
+            avgCoverSize: formatBytes(agg.avgCoverSize),
+            largestCover: largestCoverImage
+          },
+          userStats: {
+            registeredUsers: totalUsers,
+            adminUsers,
+            normalUsers,
+            newUsersToday,
+            mostActiveUser: "admin"
+          },
+          downloadStats: {
+            downloadedSongs: agg.downloadedSongsCount || 0,
+            downloadsToday: agg.totalDownloads > 0 ? Math.ceil(agg.totalDownloads * 0.05) : 0,
+            mostDownloadedSong,
+            totalOfflineStorageUsed: formatBytes(agg.totalAudioSize * 0.35), // Estimated offline cached ratio
+            offlineCachedSongs: agg.downloadedSongsCount || 0
+          },
+          playbackStats: {
+            mostPlayedSong,
+            leastPlayedSong,
+            recentlyPlayedCount: agg.totalPlays || 0,
+            favoriteCount: Math.ceil(totalSongs * 0.4), // estimated favorite count
+            playlistCount: 3
+          },
+          systemHealth: {
+            backend: "🟢 Healthy",
+            mongodb: isMongoConnected ? "🟢 Healthy" : "🔴 Offline",
+            filebase: isFilebaseHealthy ? "🟢 Healthy" : "🔴 Offline",
+            uploadService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
+            streamingService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
+            downloadService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
+            storageService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning"
+          }
         },
-        analytics: {
-          uploadsToday,
-          downloadsToday: agg.totalDownloads > 0 ? Math.ceil(agg.totalDownloads * 0.05) : 0, // estimated relative to total
-          totalDownloads: agg.totalDownloads || 0,
-          mostPlayedSong,
-          largestSong,
-          largestCoverImage,
-          avgSongSize: formatBytes(agg.avgAudioSize)
-        },
-        songStats: {
-          totalAudioSize: formatBytes(agg.totalAudioSize),
-          avgAudioSize: formatBytes(agg.avgAudioSize),
-          largestAudioFile: largestSong,
-          smallestAudioFile,
-          newestUpload,
-          oldestUpload,
-          totalCovers: totalSongs,
-          avgCoverSize: formatBytes(agg.avgCoverSize),
-          largestCover: largestCoverImage
-        },
-        userStats: {
-          registeredUsers: totalUsers,
-          adminUsers,
-          normalUsers,
-          newUsersToday,
-          mostActiveUser: "admin"
-        },
-        downloadStats: {
-          downloadedSongs: agg.downloadedSongsCount || 0,
-          downloadsToday: agg.totalDownloads > 0 ? Math.ceil(agg.totalDownloads * 0.05) : 0,
-          mostDownloadedSong,
-          totalOfflineStorageUsed: formatBytes(agg.totalAudioSize * 0.35), // Estimated offline cached ratio
-          offlineCachedSongs: agg.downloadedSongsCount || 0
-        },
-        playbackStats: {
-          mostPlayedSong,
-          leastPlayedSong,
-          recentlyPlayedCount: agg.totalPlays || 0,
-          favoriteCount: Math.ceil(totalSongs * 0.4), // estimated favorite count
-          playlistCount: 3
-        },
-        systemHealth: {
-          backend: "🟢 Healthy",
-          mongodb: isMongoConnected ? "🟢 Healthy" : "🔴 Offline",
-          filebase: isFilebaseHealthy ? "🟢 Healthy" : "🔴 Offline",
-          uploadService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
-          streamingService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
-          downloadService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning",
-          storageService: isFilebaseHealthy ? "🟢 Healthy" : "🟡 Warning"
-        }
-      },
-      songs: songs.slice(0, 50).map(formatSong)
+        songs: songs.slice(0, 50).map(formatSong)
+      }
     });
   } catch (error) {
     next(error);

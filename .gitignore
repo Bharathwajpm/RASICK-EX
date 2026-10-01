@@ -16,9 +16,19 @@ dist-ssr
 .nitro
 *.local
 
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+
+# DVC / Python venv (not part of RASICK-EX)
+/.dvc/
+.dvcignore
+.venv/
 
 # Editor directories and files
 .vscode/*
@@ -30,3 +40,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Android / Gradle generated files
+/android/**/build/
+**/.gradle/
+**/.kotlin/
+/android/local.properties
+/android/captures/
+/android/.externalNativeBuild/
+/android/.cxx/
+
+# Local Android signing keys
+*.keystore
+*.jks
+*.apk
+
+# Generated upload staging files
+/backend/uploads/temp/
+*.tmp
+*.part

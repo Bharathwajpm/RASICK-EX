@@ -10,6 +10,14 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.DecoderReuseEvaluation
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import android.os.Build
 import com.rasick.shared.api.RetrofitClient
 import com.rasick.shared.data.*
 import com.rasick.shared.model.Song
@@ -94,19 +102,71 @@ object PlaybackManager {
         if (player != null) return
         appContext = context.applicationContext
 
-        val renderersFactory = DefaultRenderersFactory(context.applicationContext).apply {
+        val customCodecSelector = object : MediaCodecSelector {
+            override fun getDecoderInfos(
+                mimeType: String,
+                requiresSecureDecoder: Boolean,
+                requiresTunnelingDecoder: Boolean
+            ): List<MediaCodecInfo> {
+                val decoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                    mimeType,
+                    requiresSecureDecoder,
+                    requiresTunnelingDecoder
+                )
+                if (mimeType.equals("audio/ac3", ignoreCase = true) ||
+                    mimeType.equals("audio/eac3", ignoreCase = true) ||
+                    mimeType.equals("audio/vnd.dts", ignoreCase = true) ||
+                    mimeType.equals("audio/vnd.dts.hd", ignoreCase = true) ||
+                    mimeType.equals("audio/truehd", ignoreCase = true)
+                ) {
+                    return decoders.filter { info ->
+                        val isHardware = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            info.hardwareAccelerated
+                        } else {
+                            !info.name.startsWith("OMX.google", ignoreCase = true) &&
+                            !info.name.startsWith("c2.android", ignoreCase = true) &&
+                            !info.name.startsWith("OMX.sec", ignoreCase = true)
+                        }
+                        isHardware
+                    }
+                }
+                return decoders
+            }
+        }
+
+        val renderersFactory = object : DefaultRenderersFactory(context.applicationContext) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink? {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(emptyArray())
+                    .setEnableFloatOutput(false) // Disable float output for passthrough
+                    .setEnableAudioTrackPlaybackParams(true) // Enable playback params for better audio handling
+                    .build()
+            }
+        }.apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            setMediaCodecSelector(customCodecSelector)
         }
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setFlags(android.media.AudioAttributes.FLAG_HW_AV_SYNC)
             .build()
+
+        val cacheDataSourceFactory = DownloadManager.getCacheDataSourceFactory(context.applicationContext)
+        val mediaSourceFactory = DefaultMediaSourceFactory(context.applicationContext)
+            .setDataSourceFactory(cacheDataSourceFactory)
 
         player = ExoPlayer.Builder(context.applicationContext)
             .setRenderersFactory(renderersFactory)
-            .setAudioAttributes(audioAttributes, true)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setAudioAttributes(audioAttributes, true) // true = handle audio focus
             .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
             .apply {
                 addListener(object : Player.Listener {
@@ -136,13 +196,32 @@ object PlaybackManager {
                         updatePlaying(false)
                         updateBuffering(false)
                         stopPositionUpdates()
+                        val current = currentSong
+                        if (current != null && (
+                            error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED ||
+                            error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
+                        )) {
+                            val fallbackUrl = current.fallbackUrl
+                            if (fallbackUrl != null) {
+                                val activeMediaItem = player?.currentMediaItem
+                                val activeUri = activeMediaItem?.localConfiguration?.uri?.toString()
+                                val resolvedFallbackUrl = if (fallbackUrl.startsWith("http")) fallbackUrl else {
+                                    val baseUrl = RetrofitClient.getBaseUrl().removeSuffix("/")
+                                    "$baseUrl/${fallbackUrl.removePrefix("/")}"
+                                }
+                                if (activeUri != resolvedFallbackUrl) {
+                                    playFallback(current, fallbackUrl)
+                                    return
+                                }
+                            }
+                        }
                         val msg = when (error.errorCode) {
                             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> 
                                 "Network connection failed. Reconnecting..."
                             PlaybackException.ERROR_CODE_DECODING_FAILED,
                             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> 
-                                "Audio format not supported by device."
+                                "Codec not supported."
                             else -> "Playback failed: ${error.localizedMessage}"
                         }
                         updateError(msg)
@@ -178,6 +257,15 @@ object PlaybackManager {
                         initializationDurationMs: Long
                     ) {
                         updateActiveDecoder(decoderName)
+                        if (decoderName.contains("ffmpeg", ignoreCase = true) || decoderName.contains("Ffmpeg", ignoreCase = true)) {
+                            updateError("Using software decoder.")
+                        } else if (decoderName.contains("sink", ignoreCase = true) || decoderName.contains("passthrough", ignoreCase = true)) {
+                            updateError("Using HDMI passthrough.")
+                        } else {
+                            if (errorMsg == "Hardware decoder unavailable. Trying FFmpeg...") {
+                                updateError(null)
+                            }
+                        }
                     }
                 })
             }
@@ -195,6 +283,32 @@ object PlaybackManager {
         }
     }
 
+    private fun playFallback(song: Song, fallbackUrl: String) {
+        val p = player ?: return
+        val resolvedFallbackUrl = if (fallbackUrl.startsWith("http")) fallbackUrl else {
+            val baseUrl = RetrofitClient.getBaseUrl().removeSuffix("/")
+            "$baseUrl/${fallbackUrl.removePrefix("/")}"
+        }
+        p.stop()
+        p.clearMediaItems()
+        val mediaItem = MediaItem.Builder()
+            .setUri(resolvedFallbackUrl)
+            .setMediaId(song.id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(song.artist)
+                    .build()
+            )
+            .build()
+        p.setMediaItem(mediaItem)
+        p.prepare()
+        p.play()
+        recordPlaybackStart(song)
+        saveQueueState()
+        startPlaybackService()
+    }
+
     fun play(song: Song, newQueue: List<Song>) {
         val p = player ?: return
         updateError(null)
@@ -210,44 +324,49 @@ object PlaybackManager {
         val mimeType = when (extension) {
             "mp3" -> "audio/mpeg"
             "ac3" -> "audio/ac3"
+            "ec3" -> "audio/eac3"
+            "eac3" -> "audio/eac3"
             "dts" -> "audio/vnd.dts"
+            "dtshd" -> "audio/vnd.dts.hd"
+            "truehd" -> "audio/truehd"
+            "thd" -> "audio/truehd"
             "aac" -> "audio/mp4a-latm"
             "wav" -> "audio/wav"
             "flac" -> "audio/flac"
             else -> "audio/mpeg"
         }
 
-        // Validate platform codec decoders list
-        if (mimeType == "audio/ac3" || mimeType == "audio/vnd.dts") {
-            val ctx = appContext
-            val isSupported = if (ctx != null) {
-                DeviceCapabilities.isCodecSupported(mimeType) || DeviceCapabilities.isHdmiConnected(ctx)
-            } else {
-                DeviceCapabilities.isCodecSupported(mimeType)
-            }
-            if (!isSupported) {
-                updateError("Codec not supported by device hardware.")
-                return
-            }
-        }
+        val isSpecialCodec = mimeType == "audio/ac3" ||
+                             mimeType == "audio/eac3" ||
+                             mimeType == "audio/vnd.dts" ||
+                             mimeType == "audio/vnd.dts.hd" ||
+                             mimeType == "audio/truehd"
 
-        var localPath: String? = null
-        appContext?.let { ctx ->
-            runBlocking(Dispatchers.IO) {
-                val db = DownloadDatabase.getDatabase(ctx)
-                val downloaded = db.downloadedSongDao().getSongById(song.id)
-                if (downloaded != null && downloaded.status == "COMPLETED") {
-                    val file = java.io.File(downloaded.localPath)
-                    if (file.exists()) {
-                        localPath = file.absolutePath
-                    }
+        if (isSpecialCodec) {
+            val ctx = appContext
+            val hasHardware = DeviceCapabilities.isHardwareCodecSupported(mimeType)
+            val hasHdmi = ctx != null && DeviceCapabilities.isHdmiConnected(ctx)
+            val hasFfmpeg = FfmpegLibrary.isAvailable()
+
+            if (hasHardware) {
+                updateError(null)
+            } else if (hasHdmi) {
+                updateError("Using HDMI passthrough.")
+            } else if (hasFfmpeg) {
+                updateError("Hardware decoder unavailable. Trying FFmpeg...")
+            } else {
+                val fallbackUrl = song.fallbackUrl
+                if (fallbackUrl != null) {
+                    playFallback(song, fallbackUrl)
+                    return
+                } else {
+                    updateError("Codec not supported.")
+                    return
                 }
             }
         }
 
-        val resolvedUrl = if (localPath != null) {
-            "file://$localPath"
-        } else if (song.audioUrl?.startsWith("http") == true) {
+        val resolvedUrl = if (song.audioUrl?.startsWith("http") == true) {
             song.audioUrl
         } else {
             val baseUrl = RetrofitClient.getBaseUrl().removeSuffix("/")
@@ -256,6 +375,11 @@ object PlaybackManager {
 
         p.stop()
         p.clearMediaItems()
+
+        // Media3's CacheDataSource (configured in DownloadManager) automatically
+        // serves downloaded content from local cache without network requests.
+        // For downloaded songs, ExoPlayer resolves the URI through CacheDataSource
+        // which checks SimpleCache first, enabling true offline playback.
         
         val mediaItem = MediaItem.Builder()
             .setUri(resolvedUrl)

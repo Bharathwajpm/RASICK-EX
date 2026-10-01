@@ -58,6 +58,17 @@ const songSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Album association (optional — for catalog grouping)
+    album: {
+      type: String,
+      trim: true,
+    },
+
+    albumId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Album",
+    },
+
     // Home feed grouping: Trending, Latest Releases, Local Specials, Recommended
     section: {
       type: String,
@@ -132,8 +143,10 @@ const songSchema = new mongoose.Schema(
   }
 );
 
-songSchema.index({ section: 1, createdAt: -1 });
-songSchema.index({ category: 1 });
+songSchema.index({ isActive: 1, section: 1, createdAt: -1 });
+songSchema.index({ isActive: 1, category: 1 });
+songSchema.index({ isActive: 1, artist: 1 });
+songSchema.index({ isActive: 1, albumId: 1 });
 songSchema.index({ title: "text", artist: "text", category: "text" });
 
 module.exports = mongoose.model("Song", songSchema);

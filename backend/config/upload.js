@@ -14,7 +14,8 @@ const storage = multer.diskStorage({
     cb(null, UPLOAD_TEMP_DIR);
   },
   filename(_req, file, cb) {
-    const ext = path.extname(file.originalname) || (file.fieldname === "audio" ? ".mp3" : ".jpg");
+    const isAudio = file.fieldname === "audio" || file.fieldname === "fallback";
+    const ext = path.extname(file.originalname) || (isAudio ? ".mp3" : ".jpg");
     cb(null, `${randomUUID()}${ext}`);
   },
 });
@@ -55,7 +56,7 @@ const isSupportedAudioFile = (file) => {
 };
 
 const fileFilter = (_req, file, cb) => {
-  if (file.fieldname === "audio") {
+  if (file.fieldname === "audio" || file.fieldname === "fallback") {
     return isSupportedAudioFile(file)
       ? cb(null, true)
       : cb(new Error("Only .mp3, .dts, .ac3, .wav, .aac, and .flac audio files are allowed"));
@@ -77,6 +78,7 @@ const upload = multer({
 const uploadSongFiles = upload.fields([
   { name: "cover", maxCount: 1 },
   { name: "audio", maxCount: 1 },
+  { name: "fallback", maxCount: 1 },
 ]);
 
 module.exports = {

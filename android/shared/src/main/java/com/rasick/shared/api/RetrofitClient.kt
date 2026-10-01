@@ -1,6 +1,7 @@
 package com.rasick.shared.api
 
 import com.rasick.shared.BuildConfig
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -8,21 +9,45 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     private var baseUrl: String = BuildConfig.BACKEND_URL
+    private var authToken: String? = null
 
     fun setBaseUrl(url: String) {
         baseUrl = if (url.endsWith("/")) url else "$url/"
-        retrofitInstance = null
-        authServiceInstance = null
-        songServiceInstance = null
+        resetInstances()
+    }
+
+    fun setAuthToken(token: String?) {
+        authToken = token
     }
 
     fun getBaseUrl(): String = baseUrl
 
+    fun getAuthToken(): String? = authToken
+
+    private fun resetInstances() {
+        retrofitInstance = null
+        authServiceInstance = null
+        songServiceInstance = null
+        adminServiceInstance = null
+    }
+
+    private val authInterceptor = Interceptor { chain ->
+        val original = chain.request()
+        val requestBuilder = original.newBuilder()
+        authToken?.let {
+            if (it.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer $it")
+            }
+        }
+        chain.proceed(requestBuilder.build())
+    }
+
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
+            .addInterceptor(authInterceptor)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
@@ -55,6 +80,15 @@ object RetrofitClient {
         get() = songServiceInstance ?: synchronized(this) {
             val service = getRetrofit().create(SongService::class.java)
             songServiceInstance = service
+            service
+        }
+
+    private var adminServiceInstance: AdminService? = null
+
+    val adminService: AdminService
+        get() = adminServiceInstance ?: synchronized(this) {
+            val service = getRetrofit().create(AdminService::class.java)
+            adminServiceInstance = service
             service
         }
 }

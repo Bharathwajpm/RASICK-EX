@@ -29,6 +29,7 @@ import com.rasick.shared.api.RetrofitClient
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvPlayerWidget(
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val song = PlaybackManager.currentSong ?: return
@@ -43,12 +44,11 @@ fun TvPlayerWidget(
         "$baseUrl/${song.cover.removePrefix("/")}"
     }
 
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .wrapContentHeight()
-            .background(Color(0xFF1E1E1E))
-            .border(1.dp, Color.DarkGray, RoundedCornerShape(12.dp))
+            .tvFocusable(RoundedCornerShape(12.dp), onClick = onClick)
+            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
     ) {
         Column(
             modifier = Modifier
@@ -171,16 +171,9 @@ fun TvPlayerButton(
     contentDescription: String,
     modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
     Button(
         onClick = onClick,
-        modifier = modifier
-            .onFocusChanged { isFocused = it.isFocused }
-            .border(
-                width = 2.dp,
-                color = if (isFocused) Color.White else Color.Transparent,
-                shape = RoundedCornerShape(20.dp)
-            ),
+        modifier = modifier.tvFocusable(RoundedCornerShape(20.dp)) {},
         colors = ButtonDefaults.colors(
             containerColor = Color.DarkGray,
             contentColor = Color.White

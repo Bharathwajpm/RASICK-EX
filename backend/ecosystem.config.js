@@ -14,7 +14,9 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 5000,
-        MONGODB_URI: "mongodb://127.0.0.1:27017/rasick-ex",
+        // MONGODB_URI is intentionally NOT set here.
+        // It is loaded from backend/.env by dotenv (server.js line 1).
+        // Hardcoding it here would override .env and shadow the Atlas URI.
         JWT_SECRET: "your-production-jwt-secret-here",
         UPLOAD_ROOT: "/opt/rasick/uploads",
         UPLOAD_AUDIO_PATH: "/opt/rasick/uploads/audio",
