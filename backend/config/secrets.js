@@ -74,10 +74,22 @@ const validateSecrets = () => {
   // Validate JWT_SECRET strength (will throw if weak in production)
   getJwtSecret();
 
-  // Warn (but don't block) on missing optional Filebase credentials
-  if (!process.env.FILEBASE_ACCESS_KEY || !process.env.FILEBASE_SECRET_KEY) {
+  // Filebase is optional for startup, but required for hosted uploads and streaming.
+  const { isFilebaseConfigured } = require("./filebase");
+  if (!isFilebaseConfigured()) {
+    // Diagnostic: show which env vars are present (values are NOT logged)
+    const diagKeys = [
+      "FILEBASE_ACCESS_KEY", "FILEBASE_SECRET_KEY",
+      "FIREBASE_ACCESS_KEY", "FIREBASE_SECRET_KEY",
+    ];
+    const envDiag = diagKeys.map((k) => {
+      const v = process.env[k];
+      return `${k}=${v != null ? "SET(" + v.length + " chars)" : "UNSET"}`;
+    });
+    console.warn("[DIAG] Filebase env check:", envDiag.join(", "));
     console.warn(
-      "[WARN] FILEBASE_ACCESS_KEY / FILEBASE_SECRET_KEY not set. " +
+      "[WARN] Filebase credentials not set (FILEBASE_ACCESS_KEY / FILEBASE_SECRET_KEY " +
+      "or FIREBASE_ACCESS_KEY / FIREBASE_SECRET_KEY). " +
       "Uploads and streaming from Filebase S3 will fail."
     );
   }

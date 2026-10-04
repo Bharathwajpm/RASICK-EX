@@ -1,13 +1,39 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const fs = require("fs");
 
+const getFilebaseCredentials = () => {
+  const filebaseAccessKey = process.env.FILEBASE_ACCESS_KEY?.trim();
+  const filebaseSecretKey = process.env.FILEBASE_SECRET_KEY?.trim();
+  if (filebaseAccessKey && filebaseSecretKey) {
+    return { accessKeyId: filebaseAccessKey, secretAccessKey: filebaseSecretKey };
+  }
+
+  const firebaseAccessKey = process.env.FIREBASE_ACCESS_KEY?.trim();
+  const firebaseSecretKey = process.env.FIREBASE_SECRET_KEY?.trim();
+  if (firebaseAccessKey && firebaseSecretKey) {
+    return { accessKeyId: firebaseAccessKey, secretAccessKey: firebaseSecretKey };
+  }
+
+  return null;
+};
+
+const isFilebaseConfigured = () => Boolean(getFilebaseCredentials());
+
+const assertFilebaseConfigured = () => {
+  if (isFilebaseConfigured()) return;
+
+  const error = new Error(
+    "Filebase storage is unavailable. Configure FILEBASE_ACCESS_KEY and FILEBASE_SECRET_KEY, or the FIREBASE_ACCESS_KEY and FIREBASE_SECRET_KEY aliases."
+  );
+  error.status = 503;
+  error.code = "FILEBASE_NOT_CONFIGURED";
+  throw error;
+};
+
 const s3Client = new S3Client({
   endpoint: process.env.FILEBASE_ENDPOINT || "https://s3.filebase.io",
   region: "us-east-1",
-  credentials: {
-    accessKeyId: process.env.FILEBASE_ACCESS_KEY,
-    secretAccessKey: process.env.FILEBASE_SECRET_KEY,
-  },
+  credentials: getFilebaseCredentials() || undefined,
   forcePathStyle: true,
 });
 
@@ -20,6 +46,8 @@ const s3Client = new S3Client({
  * @returns {Promise<string>} Public Filebase S3 object URL.
  */
 const uploadToFilebase = async (localFilePath, destinationKey, contentType, attempt = 1) => {
+  assertFilebaseConfigured();
+
   let fileBuffer;
   try {
     const size = fs.statSync(localFilePath).size;
@@ -77,7 +105,7 @@ const uploadToFilebase = async (localFilePath, destinationKey, contentType, atte
  * @returns {Promise<void>}
  */
 const deleteFromFilebase = async (s3Url) => {
-  if (!s3Url) return;
+  if (!s3Url || !isFilebaseConfigured()) return;
   
   let key = s3Url;
   try {
@@ -110,6 +138,8 @@ const deleteFromFilebase = async (s3Url) => {
 
 module.exports = {
   s3Client,
+  isFilebaseConfigured,
+  assertFilebaseConfigured,
   uploadToFilebase,
   deleteFromFilebase,
 };
